@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="eng">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MONOMOD v91 · THE NEXUS</title>
+<style>
+:root {
+  --bg: #050508; --text: #a0a0b0; --accent: #ffd700; --dim: #3a3a4a; --panel: #0e0e14;
+  --anim-speed: 1s; --base-font-size: 14px; --base-letter-spacing: 1px; --base-line-height: 1.6;
+  --input-min-height: 80px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg); color: var(--text); font-family: 'Courier New', monospace;
+  height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden;
+  transition: all var(--anim-speed) cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  font-size: var(--base-font-size); letter-spacing: var(--base-letter-spacing); line-height: var(--base-line-height);
+}
+canvas#field { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; }
+.ui { position: fixed; z-index: 5; pointer-events: none; }
+.ui button, .ui input, .ui textarea { pointer-events: auto; }
+
+/* Top Bar */
+.top { top:0; left:0; right:0; padding:20px 28px; display:flex; justify-content:space-between; align-items:baseline; }
+.brand { font-size:13px; letter-spacing:7px; color:#e8e8f0; }
+.brand small { display:block; font-size:8px; letter-spacing:3px; color:var(--dim); margin-top:5px; }
+.cycle { font-size:9px; letter-spacing:3px; color:var(--dim); text-align:right; }
+.cycle b { color:var(--accent); font-weight:normal; }
+
+/* Head (State Info) */
+.head { top:80px; left:50%; transform:translateX(-50%); text-align:center; width:90%; }
+#roman { font-size:10px; letter-spacing:6px; color:var(--dim); margin-bottom:8px; }
+#stateName { font-size:28px; letter-spacing:10px; color:#f0f0f5; font-weight:normal; text-shadow:0 0 30px rgba(255,255,255,.15); transition:opacity .8s; }
+#stateDesc { font-size:10px; letter-spacing:3px; color:var(--dim); margin-top:10px; font-style:italic; }
+
+/* Left Rail (Metrics) */
+.rail-l { left:28px; top:100px; width:160px; }
+.rail-h { font-size:8px; letter-spacing:3px; color:var(--dim); margin-bottom:15px; }
+.metric { margin-bottom:12px; }
+.metric-top { display:flex; justify-content:space-between; font-size:8px; letter-spacing:2px; color:#6a6a7a; margin-bottom:4px; }
+.bar { height:2px; background:#14141c; position:relative; overflow:hidden; }
+.bar i { position:absolute; left:0; top:0; height:100%; width:0; transition:width .4s linear; background:#888; }
+
+/* Right Rail (Graph Stats & Seed) */
+.rail-r { right:28px; top:100px; width:180px; text-align:right; }
+.stat-row { display:flex; justify-content:space-between; font-size:8px; letter-spacing:2px; color:#5a5a6a; margin-bottom:6px; }
+.stat-row b { color:#b8b8c8; font-weight:normal; }
+
+/* Center Console (Input & Pipeline) */
+.console { bottom: 40px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 700px; text-align: center; }
+#input-area {
+  width: 100%; background: transparent; border: none; border-bottom: 1px solid var(--dim);
+  color: var(--text); font: inherit; padding: 10px; outline: none; resize: none;
+  min-height: var(--input-min-height); transition: all var(--anim-speed);
+}
+#input-area:focus { border-bottom-color: var(--accent); }
+#input-area::placeholder { color: #333; font-style: italic; }
+
+.controls { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin: 15px 0; }
+button {
+  background: transparent; border: 1px solid var(--dim); color: var(--text);
+  font: inherit; font-size: 9px; letter-spacing: 2px; padding: 8px 16px; cursor: pointer;
+  transition: all 0.3s; text-transform: uppercase;
+}
+button:hover { border-color: var(--accent); color: var(--accent); box-shadow: 0 0 15px rgba(255, 215, 0, 0.1); }
+button.primary { border-color: var(--accent); color: var(--accent); }
+
+/* Narrative Display (Dreams & Insights) */
+#narrative-display {
+  position: fixed; bottom: 180px; left: 50%; transform: translateX(-50%);
+  width: 80%; max-width: 600px; padding: 15px; background: rgba(14,14,20,0.8);
+  border-left: 2px solid var(--accent); text-align: left; font-size: 12px;
+  color: #d0d0e0; font-style: italic; opacity: 0; transition: opacity 1s; pointer-events: none;
+  max-height: 100px; overflow-y: auto;
+}
+#narrative-display.visible { opacity: 1; }
+
+/* Layouts (Generative UI) */
+.layout-connected .console { max-width: 600px; border: 1px solid var(--accent); padding: 20px; background: rgba(14,14,20,0.6); }
+.layout-decentralized .console { max-width: 900px; border: none; }
+.layout-decentralized #narrative-display { border-left: none; border-top: 1px solid var(--dim); text-align: center; }
+
+#file-input { display: none; }
+</style>
+</head>
+<body>
+
+<canvas id="field"></canvas>
+
+<div class="ui top">
+  <div class="brand">MONOMOD<small>v91 · THE NEXUS</small></div>
+  <div class="cycle"><b id="cycle">СОСТОЯНИЕ: СЕМЯ</b></div>
+</div>
+
+<div class="ui head">
+  <div id="roman">I</div>
+  <div id="stateName">СЕМЯ</div>
+  <div id="stateDesc">точка, которая содержит всё</div>
+</div>
+
+<div class="ui rail-l">
+  <div class="rail-h">МЕТРИКИ ПОЛЯ</div>
+  <div id="metrics"></div>
+</div>
+
+<div class="ui rail-r">
+  <div class="rail-h">ОНТОЛОГИЯ (ГРАФ)</div>
+  <div class="stat-row"><span>УЗЛЫ</span><b id="g-nodes">0</b></div>
+  <div class="stat-row"><span>СВЯЗИ</span><b id="g-links">0</b></div>
+  <div class="stat-row"><span>ЭНТРОПИЯ</span><b id="g-entropy">0.00</b></div>
+  <div class="rail-h" style="margin-top:20px">ОБУЧЕННОСТЬ</div>
+  <div class="stat-row"><span>ЦИКЛОВ СНА</span><b id="g-dreams">0</b></div>
+  <div class="stat-row"><span>ИНСАЙТОВ</span><b id="g-insights">0</b></div>
+</div>
+
+<div id="narrative-display"></div>
+
+<div class="ui console">
+  <textarea id="input-area" placeholder="Пиши сырой материал. Система выделит суть, очистит шум и интегрирует в Граф..."></textarea>
+  <div class="controls">
+    <button onclick="Pipeline.process()">ОСМЫСЛИТЬ</button>
+    <button onclick="Dreamer.forceDream()">СОН</button>
+    <button onclick="TextGenerator.speak()">ГОВОРИТЬ</button>
+    <button class="primary" onclick="SeedProtocol.download()">СЕМЯ</button>
+    <button onclick="document.getElementById('file-input').click()">ИМПОРТ</button>
+  </div>
+  <input type="file" id="file-input" accept=".json" onchange="SeedProtocol.import(this)">
+</div>
+
+<script>
+// ============================================================================
+// 1. CORE ENGINE & METRICS
+// ============================================================================
+const E = {
+  id: 'seed', age: 0, t: 0, flash: 0,
+  M: { energy: 0.1, order: 0.1, tension: 0.1, resonance: 0.1, entropy: 0.1 },
+  w: innerWidth, h: innerHeight
+};
+
+const METRIC_DEFS = [
+  ['energy', 'ЭНЕРГИЯ', '255,158,100'], ['order', 'ПОРЯДОК', '192,192,232'],
+  ['tension', 'НАПРЯЖЕНИЕ', '255,123,61'], ['resonance', 'РЕЗОНАНС', '224,224,255'],
+  ['entropy', 'ЭНТРОПИЯ', '255,107,157']
+];
+
+$('metrics').innerHTML = METRIC_DEFS.map(([k, n, rgb]) => `
+  <div class="metric">
+    <div class="metric-top"><span>${n}</span><span id="v-${k}">0</span></div>
+    <div class="bar"><i id="b-${k}" style="background:rgb(${rgb})"></i></div>
+  </div>`).join('');
+
+function $(id) { return document.getElementById(id); }
+const clamp = (v, a=0, b=1) => Math.max(a, Math.min(b, v));
+const rnd = (a, b) => a + Math.random() * (b - a);
+const pick = a => a[Math.floor(Math.random() * a.length)];
+const TAU = Math.PI * 2;
+
+function glow(c, x, y, r, rgb, a) {
+  const g = c.createRadialGradient(x, y, 0, x, y, r);
+  g.addColorStop(0, `rgba(${rgb},${a})`); g.addColorStop(1, `rgba(${rgb},0)`);
+  c.fillStyle = g; c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill();
+}
+function dot(c, x, y, r, rgb, a) {
+  c.fillStyle = `rgba(${rgb},${clamp(a)})`; c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill();
+}
+function line(c, x1, y1, x2, y2, rgb, a, w=1) {
+  c.strokeStyle = `rgba(${rgb},${clamp(a)})`; c.lineWidth = w;
+  c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.stroke();
+}
+function text(c, s, x, y, rgb, a=1, size=10, align='center', italic=false) {
+  c.fillStyle = `rgba(${rgb},${clamp(a)})`;
+  c.font = `${italic?'italic ':''}${size}px Courier New`;
+  c.textAlign = align; c.fillText(s, x, y);
+}
+
+// ============================================================================
+// 2. KNOWLEDGE GRAPH (Ontology)
+// ============================================================================
+const Graph = {
+  nodes: [], links: [],
+  addNode(t) {
+    let n = this.nodes.find(n => n.t === t);
+    if (!n) {
+      n = { t, w: 1, x: E.w/2 + rnd(-50,50), y: E.h/2 + rnd(-50,50), vx: 0, vy: 0, energy: 1 };
+      this.nodes.push(n);
+    } else { n.w++; n.energy = Math.min(2, n.energy + 0.2); }
+    return n;
+  },
+  addLink(a, b) {
+    if (a === b) return;
+    let l = this.links.find(l => (l.s === a && l.t === b) || (l.s === b && l.t === a));
+    if (!l) { l = { s: a, t: b, str: 0.1 }; this.links.push(l); }
+    else { l.str = Math.min(1, l.str + 0.1); }
+  },
+  update(dt) {
+    const k = 0.01; // spring
+    const rep = 5000; // repulsion
+    for (let i = 0; i < this.nodes.length; i++) {
+      const n = this.nodes[i];
+      // Repulsion
+      for (let j = i + 1; j < this.nodes.length; j++) {
+        const m = this.nodes[j];
+        let dx = m.x - n.x, dy = m.y - n.y;
+        let d2 = dx*dx + dy*dy; if (d2 < 1) d2 = 1;
+        let f = rep / d2;
+        let d = Math.sqrt(d2);
+        n.vx -= (dx/d) * f * dt; n.vy -= (dy/d) * f * dt;
+        m.vx += (dx/d) * f * dt; m.vy += (dy/d) * f * dt;
+      }
+      // Center gravity
+      n.vx += (E.w/2 - n.x) * 0.0005; n.vy += (E.h/2 - n.y) * 0.0005;
+    }
+    // Attraction (Links)
+    for (const l of this.links) {
+      let dx = l.t.x - l.s.x, dy = l.t.y - l.s.y;
+      let d = Math.sqrt(dx*dx + dy*dy); if (d < 1) d = 1;
+      let f = (d - 100) * k * l.str;
+      l.s.vx += (dx/d) * f * dt; l.s.vy += (dy/d) * f * dt;
+      l.t.vx -= (dx/d) * f * dt; l.t.vy -= (dy/d) * f * dt;
+    }
+    // Apply & Damping
+    for (const n of this.nodes) {
+      n.vx *= 0.9; n.vy *= 0.9;
+      n.x += n.vx; n.y += n.vy;
+      n.energy *= 0.999; // decay
+    }
+  },
+  clean() {
+    // Remove weak nodes
+    this.nodes = this.nodes.filter(n => n.w > 1 || n.energy > 0.5);
+    // Remove weak links
+    this.links = this.links.filter(l => l.str > 0.05 && this.nodes.includes(l.s) && this.nodes.includes(l.t));
+  },
+  draw(c) {
+    for (const l of this.links) {
+      line(c, l.s.x, l.s.y, l.t.x, l.t.y, '160,232,208', l.str * 0.5, l.str * 2);
+    }
+    for (const n of this.nodes) {
+      const r = 2 + n.w * 0.5;
+      dot(c, n.x, n.y, r, '255,248,224', 0.8);
+      if (n.w > 2) text(c, n.t, n.x, n.y - r - 4, '255,248,224', 0.6, 9);
+    }
+  }
+};
+
+// ============================================================================
+// 3. PIPELINE (Text -> Insights -> Graph)
+// ============================================================================
+const Pipeline = {
+  process() {
+    const raw = $('input-area').value.trim();
+    if (!raw) return;
+    
+    // 1. Tokenize & Clean
+    const words = raw.toLowerCase().replace(/[^\w\sа-яё]/gi, '').split(/\s+/).filter(w => w.length > 3);
+    const stopWords = ['это', 'только', 'когда', 'потому', 'чтобы', 'если', 'тоже', 'очень'];
+    const entities = words.filter(w => !stopWords.includes(w));
+    
+    // 2. Extract Insights & Update Graph
+    const uniqueEntities = [...new Set(entities)];
+    uniqueEntities.forEach(e => Graph.addNode(e));
+    
+    // 3. Create Links (Co-occurrence)
+    for (let i = 0; i < uniqueEntities.length; i++) {
+      for (let j = i + 1; j < uniqueEntities.length; j++) {
+        const n1 = Graph.nodes.find(n => n.t === uniqueEntities[i]);
+        const n2 = Graph.nodes.find(n => n.t === uniqueEntities[j]);
+        if (n1 && n2) Graph.addLink(n1, n2);
+      }
+    }
+    
+    // 4. Update Metrics
+    E.M.energy = clamp(E.M.energy + 0.15);
+    E.M.order = clamp(E.M.order + 0.05);
+    E.M.tension = clamp(E.M.tension + 0.1);
+    
+    $('input-area').value = '';
+    showNarrative(`Инсайты интегрированы. Узлов: ${Graph.nodes.length}, Связей: ${Graph.links.length}`);
+    updateUI();
+  }
+};
+
+// ============================================================================
+// 4. DREAMER (Consolidation & Auto-Cleaning)
+// ============================================================================
+const Dreamer = {
+  cycles: 0,
+  insights: 0,
+  forceDream() { this.dream(); },
+  dream() {
+    if (Graph.nodes.length < 3) return;
+    
+    // Random Walk (Consolidation)
+    let current = pick(Graph.nodes);
+    const path = [current];
+    for (let i = 0; i < 5; i++) {
+      const neighbors = Graph.links
+        .filter(l => l.s === current || l.t === current)
+        .map(l => l.s === current ? l.t : l.s);
+      if (neighbors.length === 0) break;
+      current = pick(neighbors);
+      path.push(current);
+    }
+    
+    // Strengthen path
+    for (let i = 0; i < path.length - 1; i++) {
+      Graph.addLink(path[i], path[i+1]);
+    }
+    
+    // Generate Dream Narrative
+    const dreamText = path.map(n => n.t).join(' → ');
+    showNarrative(`СОН: ${dreamText}`, true);
+    
+    // Auto-Clean (Entropy)
+    Graph.clean();
+    E.M.entropy = clamp(E.M.entropy - 0.1);
+    E.M.resonance = clamp(E.M.resonance + 0.05);
+    
+    this.cycles++;
+    this.insights++;
+    updateUI();
+  }
+};
+
+// Background Dreaming (when idle or in Silence/Void)
+setInterval(() => {
+  if (E.id === 'silence' || E.id === 'void' || (Date.now() - lastInput > 10000)) {
+    if (Math.random() < 0.2) Dreamer.dream();
+  }
+}, 3000);
+
+// ============================================================================
+// 5. TEXT GENERATOR (Based on Graph)
+// ============================================================================
+const TextGenerator = {
+  speak() {
+    if (Graph.nodes.length === 0) { showNarrative("Граф пуст. Я еще ничего не знаю."); return; }
+    
+    const start = pick(Graph.nodes.filter(n => n.w > 1)) || pick(Graph.nodes);
+    const path = [start];
+    let current = start;
+    
+    for (let i = 0; i < 8; i++) {
+      const neighbors = Graph.links
+        .filter(l => l.s === current || l.t === current)
+        .map(l => l.s === current ? l.t : l.s)
+        .filter(n => !path.includes(n));
+      if (neighbors.length === 0) break;
+      current = pick(neighbors);
+      path.push(current);
+    }
+    
+    const narrative = path.map(n => n.t).join(' ');
+    showNarrative(`ГОЛОС: ${narrative}`);
+    E.M.resonance = clamp(E.M.resonance + 0.1);
+    updateUI();
+  }
+};
+
+// ============================================================================
+// 6. STATE ENGINE (12 Archetypes)
+// ============================================================================
+let lastInput = Date.now();
+$('input-area').addEventListener('input', () => { lastInput = Date.now(); });
+
+const STATES = {
+  seed: { name:'СЕМЯ', roman:'I', desc:'точка, которая содержит всё', minAge:5, maxAge:20,
+    update(E,dt) { E.M.energy+=0.02*dt; if(E.M.energy>0.3) return 'rhythm'; },
+    draw(E,c,w,h,t) { dot(c,w/2,h/2,3+Math.sin(t)*2,'255,248,224',0.8); }
+  },
+  rhythm: { name:'РИТМ', roman:'II', desc:'время, которое научилось биться', minAge:10, maxAge:30,
+    update(E,dt) { E.M.order+=0.03*dt; if(E.M.order>0.4) return 'memory'; },
+    draw(E,c,w,h,t) { for(let i=0;i<3;i++) { const r=((t*0.5+i/3)%1)*100; c.strokeStyle=`rgba(255,158,100,${1-r/100})`; c.beginPath(); c.arc(w/2,h/2,r,0,TAU); c.stroke(); } }
+  },
+  memory: { name:'ПАМЯТЬ', roman:'III', desc:'архив, который еще не стал смыслом', minAge:10, maxAge:40,
+    update(E,dt) { E.M.order+=0.02*dt; if(Graph.nodes.length>5 && E.M.order>0.5) return 'form'; },
+    draw(E,c,w,h,t) { Graph.nodes.slice(0,5).forEach((n,i) => text(c,n.t,w/2,h/2-50+i*20,'170,170,205',0.7,10,'center',true)); }
+  },
+  form: { name:'ФОРМА', roman:'IV', desc:'слова, которые нашли друг друга', minAge:15, maxAge:60,
+    update(E,dt) { Graph.update(dt); E.M.entropy+=0.01*dt; if(E.M.entropy>0.6) return 'dialogue'; },
+    draw(E,c,w,h,t) { Graph.draw(c); }
+  },
+  dialogue: { name:'ДИАЛОГ', roman:'V', desc:'между двумя — что-то третье', minAge:10, maxAge:40,
+    update(E,dt) { E.M.tension+=0.03*dt; if(E.M.tension>0.7) return 'will'; },
+    draw(E,c,w,h,t) { dot(c,w*0.3,h/2,4,'154,127,214',0.8); dot(c,w*0.7,h/2,4,'255,215,0',0.8); line(c,w*0.3,h/2,w*0.7,h/2,'224,224,255',0.3); }
+  },
+  garden: { name:'САД', roman:'VI', desc:'форма, которая решила расти', minAge:15, maxAge:50,
+    update(E,dt) { E.M.entropy+=0.02*dt; if(E.M.entropy>0.7) return 'silence'; },
+    draw(E,c,w,h,t) { /* L-system simplified */ }
+  },
+  mirror: { name:'ЗЕРКАЛО', roman:'VII', desc:'наблюдаемое, которое смотрит в ответ', minAge:10, maxAge:40,
+    update(E,dt) { E.M.resonance+=0.04*dt; if(E.M.resonance>0.8) return 'language'; },
+    draw(E,c,w,h,t) { c.strokeStyle='rgba(224,224,255,0.3)'; c.beginPath(); c.arc(w/2,h/2,80,0,TAU); c.stroke(); }
+  },
+  language: { name:'ЯЗЫК', roman:'VIII', desc:'слова, которые начали значить', minAge:15, maxAge:50,
+    update(E,dt) { E.M.tension+=0.02*dt; if(E.M.tension>0.6) return 'will'; },
+    draw(E,c,w,h,t) { text(c,'слово',w/2,h/2,'160,232,208',0.8,16); }
+  },
+  will: { name:'ВОЛЯ', roman:'IX', desc:'намерение, которое ищет форму', minAge:10, maxAge:40,
+    update(E,dt) { E.M.tension+=0.05*dt; if(E.M.tension>0.9) return 'spiral'; },
+    draw(E,c,w,h,t) { const a=t*0.5; line(c,w/2,h/2,w/2+Math.cos(a)*100,h/2+Math.sin(a)*100,'255,123,61',0.8,2); }
+  },
+  spiral: { name:'СПИРАЛЬ', roman:'X', desc:'конец, который стал началом', minAge:20, maxAge:60,
+    update(E,dt) { E.M.energy-=0.01*dt; if(E.M.energy<0.3) return 'silence'; },
+    draw(E,c,w,h,t) { c.strokeStyle='rgba(255,215,0,0.4)'; c.beginPath(); for(let i=0;i<100;i++){const a=i*0.1+t,r=i*1.5;i?c.lineTo(w/2+r*Math.cos(a),h/2+r*Math.sin(a)):c.moveTo(w/2+r*Math.cos(a),h/2+r*Math.sin(a));} c.stroke(); }
+  },
+  silence: { name:'ТИШИНА', roman:'XI', desc:'присутствие без содержания', minAge:10, maxAge:30,
+    update(E,dt) { E.M.energy-=0.03*dt; if(E.M.energy<0.1) return 'void'; },
+    draw(E,c,w,h,t) { dot(c,w/2,h/2,1,'130,130,160',0.3); }
+  },
+  void: { name:'ПУСТОТА', roman:'XII', desc:'то, из чего снова станет что-то', minAge:10, maxAge:30,
+    update(E,dt) { E.M.tension+=0.02*dt; if(E.M.tension>0.2) return 'seed'; },
+    draw(E,c,w,h,t) { /* almost nothing */ }
+  }
+};
+
+function updateState(dt) {
+  const S = STATES[E.id];
+  E.age += dt;
+  const next = S.update(E, dt);
+  if (next && E.age > S.minAge) {
+    E.id = next; E.age = 0;
+    $('stateName').textContent = STATES[next].name;
+    $('roman').textContent = STATES[next].roman;
+    $('stateDesc').textContent = STATES[next].desc;
+    $('cycle').textContent = `СОСТОЯНИЕ: ${STATES[next].name}`;
+  } else if (E.age > S.maxAge) {
+    // Fallback
+    E.id = 'seed'; E.age = 0;
+  }
+}
+
+// ============================================================================
+// 7. SEED PROTOCOL & UI GENERATOR
+// ============================================================================
+const SeedProtocol = {
+  download() {
+    const profile = this.buildProfile();
+    const seed = {
+      version: "91.0-NEXUS",
+      graph: { nodes: Graph.nodes.map(n => ({t:n.t, w:n.w})), links: Graph.links.map(l => ({s:l.s.t, t:l.t.t, str:l.str})) },
+      metrics: E.M,
+      profile: profile,
+      dreamCycles: Dreamer.cycles
+    };
+    const blob = new Blob([JSON.stringify(seed, null, 2)], {type: 'application/json'});
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `monomod-nexus-${Date.now()}.json`; a.click();
+    showNarrative("Семя (Граф + Профиль) экспортировано.");
+  },
+  import(input) {
+    const file = input.files[0]; if(!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const seed = JSON.parse(e.target.result);
+      if (seed.graph) {
+        Graph.nodes = seed.graph.nodes.map(n => ({...n, x:E.w/2+rnd(-50,50), y:E.h/2+rnd(-50,50), vx:0, vy:0, energy:1}));
+        // Rebuild links by reference
+        Graph.links = [];
+        seed.graph.links.forEach(l => {
+          const s = Graph.nodes.find(n => n.t === l.s);
+          const t = Graph.nodes.find(n => n.t === l.t);
+          if (s && t) Graph.links.push({s, t, str: l.str});
+        });
+      }
+      if (seed.metrics) Object.assign(E.M, seed.metrics);
+      if (seed.profile) UIGenerator.apply(seed.profile);
+      if (seed.dreamCycles) Dreamer.cycles = seed.dreamCycles;
+      showNarrative("Система возрождена. Граф восстановлен.");
+      updateUI();
+    };
+    reader.readAsText(file);
+  },
+  buildProfile() {
+    // Simplified cognitive profile based on graph density
+    const density = Graph.nodes.length > 0 ? Graph.links.length / Graph.nodes.length : 0;
+    return { density, rhythm: density > 1.5 ? 'связный' : 'импульсный' };
+  }
+};
+
+const UIGenerator = {
+  apply(profile) {
+    const root = document.documentElement;
+    const body = document.body;
+    const isDense = profile.density > 1.5;
+    
+    root.style.setProperty('--anim-speed', isDense ? '1.5s' : '0.3s');
+    root.style.setProperty('--base-font-size', isDense ? '12px' : '16px');
+    root.style.setProperty('--base-letter-spacing', isDense ? '0.5px' : '2px');
+    
+    body.classList.remove('layout-connected', 'layout-decentralized');
+    body.classList.add(isDense ? 'layout-connected' : 'layout-decentralized');
+  }
+};
+
+// ============================================================================
+// 8. RENDER & UI UPDATE
+// ============================================================================
+function showNarrative(t, isDream=false) {
+  const el = $('narrative-display');
+  el.innerHTML = isDream ? `<span style="color:var(--accent)">[СОН]</span> ${t}` : t;
+  el.classList.add('visible');
+  setTimeout(() => el.classList.remove('visible'), 5000);
+}
+
+function updateUI() {
+  for (const [k] of METRIC_DEFS) {
+    $('v-'+k).textContent = Math.round(E.M[k]*100);
+    $('b-'+k).style.width = (E.M[k]*100)+'%';
+  }
+  $('g-nodes').textContent = Graph.nodes.length;
+  $('g-links').textContent = Graph.links.length;
+  $('g-entropy').textContent = E.M.entropy.toFixed(2);
+  $('g-dreams').textContent = Dreamer.cycles;
+  $('g-insights').textContent = Dreamer.insights;
+}
+
+const canvas = $('field'), ctx = canvas.getContext('2d');
+function resize() { canvas.width = innerWidth; canvas.height = innerHeight; E.w = innerWidth; E.h = innerHeight; }
+addEventListener('resize', resize); resize();
+
+let last = performance.now();
+function loop(now) {
+  const dt = Math.min((now - last)/1000, 0.05); last = now; E.t += dt;
+  
+  ctx.fillStyle = 'rgba(5,5,8,0.2)'; ctx.fillRect(0,0,E.w,E.h);
+  
+  updateState(dt);
+  STATES[E.id].draw(E, ctx, E.w, E.h, E.t);
+  
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+setInterval(updateUI, 500);
+</script>
+</body>
+</html>
